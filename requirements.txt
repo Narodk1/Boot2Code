@@ -5,3 +5,6 @@ numpy
 plotly
 reportlab
 python-dotenv
+groq
+gspread
+dotenv
