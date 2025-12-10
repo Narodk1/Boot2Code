@@ -202,10 +202,40 @@ def get_average_db(extracted_average_median: list) -> float:
 
     return round(total_db / count, 1)
 
+def db_per_hour(extracted_average_median: list) -> dict:
+    """Calculate the average dB for each hour from the JSON data.
 
-if __name__ == "__main__":
-    data = load_json("./dps_analysis_pi3_exemple.json")
-    print(len(data))
+    Args:
+        extracted_average_median : list : List of average and median dB values extracted from JSON
+
+
+    Returns:
+    dict : Dictionary with hour as keys and average dB as values.
+    """
+    db_by_hour = {}
+    count_by_hour = {}
+
+    for item in extracted_average_median:
+        timestamp = item.get("timestamp")
+        hour = timestamp.split(" ")[1].split(":")[0]
+        avg_db = item.get("average_dB")
+
+        if hour not in db_by_hour:
+            db_by_hour[hour] = 0
+            count_by_hour[hour] = 0
+
+        if avg_db is not None:
+            db_by_hour[hour] += avg_db
+            count_by_hour[hour] += 1
+
+    average_db_by_hour = {}
+    for hour in db_by_hour:
+        if count_by_hour[hour] > 0:
+            average_db_by_hour[hour] = round(db_by_hour[hour] / count_by_hour[hour], 1)
+        else:
+            average_db_by_hour[hour] = 0
+
+    return average_db_by_hour
     (
         extracted_rating,
         extracted_dominant_noise,
