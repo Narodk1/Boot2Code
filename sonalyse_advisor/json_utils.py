@@ -236,6 +236,44 @@ def db_per_hour(extracted_average_median: list) -> dict:
             average_db_by_hour[hour] = 0
 
     return average_db_by_hour
+def get_min_max_peak_per_hour(extracted_min_max_peak: list) -> dict:
+    """Calculate the min, max, and peak dB for each hour from the JSON data.
+
+    Args:
+        extracted_min_max_peak : list : List of min, max, and peak dB values extracted from JSON
+
+    Returns:
+        dict : Dictionary with hour as keys and a dictionary of min, max, and peak dB as values.
+    """
+    min_max_peak_by_hour = {}
+
+    for item in extracted_min_max_peak:
+        timestamp = item.get("timestamp")
+        hour = timestamp.split(" ")[1].split(":")[0]
+        min_dB = item.get("min_dB")
+        max_dB = item.get("max_dB")
+        peak_dB = item.get("peak_dB")
+
+        if hour not in min_max_peak_by_hour:
+            min_max_peak_by_hour[hour] = {
+                "min_dB": None,
+                "max_dB": None,
+                "peak_dB": None,
+            }
+
+        if min_dB is not None:
+            if min_max_peak_by_hour[hour]["min_dB"] is None or min_dB < min_max_peak_by_hour[hour]["min_dB"]:
+                min_max_peak_by_hour[hour]["min_dB"] = min_dB
+
+        if max_dB is not None:
+            if min_max_peak_by_hour[hour]["max_dB"] is None or max_dB > min_max_peak_by_hour[hour]["max_dB"]:
+                min_max_peak_by_hour[hour]["max_dB"] = max_dB
+
+        if peak_dB is not None:
+            if min_max_peak_by_hour[hour]["peak_dB"] is None or peak_dB > min_max_peak_by_hour[hour]["peak_dB"]:
+                min_max_peak_by_hour[hour]["peak_dB"] = peak_dB
+
+    return min_max_peak_by_hour
     (
         extracted_rating,
         extracted_dominant_noise,
