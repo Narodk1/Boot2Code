@@ -274,6 +274,9 @@ def get_min_max_peak_per_hour(extracted_min_max_peak: list) -> dict:
                 min_max_peak_by_hour[hour]["peak_dB"] = peak_dB
 
     return min_max_peak_by_hour
+
+def gather_all_extracted_data(json_path: str):
+    data = load_json(json_path)
     (
         extracted_rating,
         extracted_dominant_noise,
@@ -283,15 +286,41 @@ def get_min_max_peak_per_hour(extracted_min_max_peak: list) -> dict:
     ) = json_extract_info(data)
 
     average_db = get_average_db(extracted_average_median)
-    print("Average dB per day:", average_db)
+    #print("Average dB per day:", average_db)
 
     average_rating = get_average_rating(extracted_rating)
-    print("Average Rating daily:", average_rating)
+    #print("Average Rating daily:", average_rating)
+
+    hourly_db = db_per_hour(extracted_average_median)
+    #print("dB per hour:", hourly_db)
+
+    get_min_max_peak_hourly = get_min_max_peak_per_hour(extracted_min_max_peak)
+    #print("Min, Max, Peak dB per hour:", min_max_peak)
 
     noise_percentage = get_noise_type_percentage_daily(extracted_dominant_noise)
-    print("Noise Type daily Percentage :", noise_percentage)
+    #print("Noise Type daily Percentage :", noise_percentage)
 
     noise_by_hour = get_noise_type_by_hour(extracted_dominant_noise)
+    noise_percentage_hourly = get_noise_type_db_hourly(noise_by_hour)
 
-    noise_percentage_hourly = get_noise_type_percentage_hourly(noise_by_hour)
-    print("Noise Type Percentage Hourly:", noise_percentage_hourly["10"])
+
+
+    all_data = {
+        "daily": {
+            "average_daily_db": average_db,
+            "average_daily_rating": average_rating,
+            "noise_daily_percentage": noise_percentage,  # Already top 5
+        },
+        "hourly": {
+            "noise_hourly_percentage": noise_percentage_hourly,
+            "db_per_hour": hourly_db,
+            "min_max_peak_per_hour": get_min_max_peak_hourly,
+        },
+
+    }
+    return all_data
+
+
+# if __name__ == "__main__":
+#     # data = load_json("./dps_analysis_pi3_exemple.json")
+    
