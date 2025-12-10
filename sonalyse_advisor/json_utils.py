@@ -7,7 +7,7 @@ def load_json(json_filename: str) -> dict:
     with open(json_filename, "r") as file:
         data = json.load(file)
 
-    return data[:5]
+    return data
 
 
 def json_extract_info(json_data: list) -> tuple:
@@ -111,7 +111,7 @@ def get_noise_type_by_hour(extracted_dominant_noise: list) -> dict:
     return noise_type_by_hour
 
 
-def get_noise_type_percentage_hourly(noise_type_by_hour: dict) -> dict:
+def get_noise_type_db_hourly(noise_type_by_hour: dict) -> dict:
     """Get the most common noise type per hour with its percentage.
 
     Args:
@@ -173,8 +173,11 @@ def get_noise_type_percentage_daily(extracted_dominant_noise: list) -> dict:
         noise_type: round((count / total_count) * 100, 1)
         for noise_type, count in noise_type_count.items()
     }
+    
+    sorted_items = sorted(noise_type_percentage.items(), key=lambda x: x[1], reverse=True)
+    top_5 = dict(sorted_items[:5])
 
-    return noise_type_percentage
+    return top_5
 
 
 def get_average_db(extracted_average_median: list) -> float:
@@ -197,7 +200,7 @@ def get_average_db(extracted_average_median: list) -> float:
     if count == 0:
         return 0
 
-    return total_db / count
+    return round(total_db / count, 1)
 
 
 if __name__ == "__main__":
