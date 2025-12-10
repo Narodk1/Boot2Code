@@ -1,7 +1,7 @@
 import json
 
 
-def load_json(json_filename: str):
+def load_json(json_filename: str) -> dict:
     """Load a JSON file and return its content as a Python object."""
 
     with open(json_filename, "r") as file:
@@ -146,7 +146,7 @@ def get_noise_type_percentage_hourly(noise_type_by_hour: dict) -> dict:
     return dominant_noise_hourly
 
 
-def get_noise_type_percentage_daily(extracted_dominant_noise: list):
+def get_noise_type_percentage_daily(extracted_dominant_noise: list) -> dict:
     """Calculate the percentage of each noise type in the JSON data.
 
     Args :
@@ -177,7 +177,7 @@ def get_noise_type_percentage_daily(extracted_dominant_noise: list):
     return noise_type_percentage
 
 
-def get_average_db(extracted_average_median: list):
+def get_average_db(extracted_average_median: list) -> float:
     """Calculate the average dB from the JSON data.
 
     Args:
@@ -210,7 +210,7 @@ if __name__ == "__main__":
         extracted_min_max_peak,
         extracted_background_noise,
     ) = json_extract_info(data)
-    
+
     average_db = get_average_db(extracted_average_median)
     print("Average dB per day:", average_db)
 
