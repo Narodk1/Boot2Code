@@ -64,6 +64,7 @@ def load_data():
                 "min_db": min([x["min_dB"] for x in extracted_min_max_peak]),
             },
             "grade": average_rating,
+            "noise_by_hour": noise_by_hour,
             "noise_percentage": noise_percentage,
             "noise_percentage_hourly": noise_percentage_hourly,
             "db_min_max_peak_by_hourly": db_min_max_peak_by_hourly,
