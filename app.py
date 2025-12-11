@@ -1,10 +1,15 @@
+import matplotlib
+matplotlib.use("Agg")
 import streamlit as st
 import json
-import pandas as pd
-import plotly.express as px
+from reportlab.platypus import SimpleDocTemplate, Image, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet
 import plotly.graph_objects as go
-from datetime import datetime
 import streamlit.components.v1 as components
+from reportlab.lib.pagesizes import A4
+import matplotlib.pyplot as plt
+from reportlab.lib.colors import HexColor
+import io
 
 # Import vos fonctions existantes
 from sonalyse_advisor.json_utils import (
@@ -81,11 +86,140 @@ data = load_data()
 # TAB 2 — FCT PDF GENERATION
 # ========================================
 
-def generate_pdf(data):
+def fig_to_img(fig):
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", bbox_inches='tight', dpi=150)
+    buf.seek(0)
+    plt.close(fig)
+    return buf
+
+def generate_pdf_with_graphs(data):
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4)
+    elements = []
+    styles = getSampleStyleSheet()
+
+    # TITRE
+    elements.append(Paragraph("<b>Diagnostic Sonalyze - Rapport</b>", styles["Title"]))
+    elements.append(Spacer(1, 20))
     
+    grade = data["grade"]
+
+    grade_color = {
+        "A": "#00AA00",
+        "B": "#55CC00",
+        "C": "#AADD00",
+        "D": "#FFEE00",
+        "E": "#FFAA00",
+        "F": "#FF5500",
+        "G": "#DD0000",
+    }.get(grade, "#AADD00")
+
+    elements.append(Paragraph(
+        f"<para alignment='center'><font size=22><b>Note de performance : "
+        f"<font color='{grade_color}'>{grade}</font></b></font></para>",
+        styles["Title"]
+    ))
+    elements.append(Spacer(1, 20))
+
+    # =====================
+    # 📊 GRAPHE : Timeline
+    # =====================
+    timeline_data = data["db_min_max_peak_by_hourly"]
+
+    fig, ax = plt.subplots(figsize=(8, 3))
+    hours = sorted(timeline_data.keys())
+    values = [timeline_data[h]["average_dB"] for h in hours]
+    ax.plot(hours, values)
+    ax.set_title("Évolution du niveau sonore (24h)")
+    ax.set_xlabel("Heure")
+    ax.set_ylabel("dB")
+
+    img_timeline = fig_to_img(fig)
+    elements.append(Image(img_timeline, width=450, height=200))
+    elements.append(Spacer(1, 20))
     
-   
-    pass  # La logique sera ajoutée plus tard
+        # ======================
+    # 🌐 GRAPHE RADAR : Sources de bruit
+    # ======================
+    labels = list(data["noise_percentage"].keys())
+    values = list(data["noise_percentage"].values())
+
+    # fermer le radar (dernier = premier)
+    values += values[:1]
+    angles = [n / float(len(labels)) * 2 * 3.1415926 for n in range(len(labels))]
+    angles += angles[:1]
+
+    fig = plt.figure(figsize=(4, 4))
+    ax = plt.subplot(111, polar=True)
+
+    # Tracé
+    ax.plot(angles, values, linewidth=2)
+    ax.fill(angles, values, alpha=0.3)
+
+    # Label des axes
+    ax.set_xticks(angles[:-1])
+    ax.set_xticklabels(labels)
+
+    # Valeurs numériques
+    for i, v in enumerate(values[:-1]):
+        ax.text(angles[i], v + 3, f"{v:.1f}%", fontsize=9, ha='center')
+
+    ax.set_title("Radar des sources de bruit (en %)")
+
+    img_radar = fig_to_img(fig)
+    elements.append(Image(img_radar, width=300, height=300))
+    elements.append(Spacer(1, 12))
+
+    legend_text = "<br/>".join(
+        [f"<b>{k.title()}</b> : {v:.1f}% du temps" for k, v in data["noise_percentage"].items()]
+    )
+    elements.append(Paragraph(f"<b>Légende des sources de bruit :</b><br/>{legend_text}", styles["Normal"]))
+    elements.append(Spacer(1, 20))
+
+    # =====================
+    # 🔥 GRAPHE : Heatmap
+    # =====================
+    heatmap = data["noise_percentage_hourly"]
+
+    fig, ax = plt.subplots(figsize=(8, 3))
+
+    # Construire la matrice
+    matrix = [v["percentage"] for v in heatmap.values()]
+
+    # Heatmap
+    cax = ax.imshow([matrix], aspect="auto", cmap="viridis")
+
+    ax.set_title("Heatmap des bruits (simplifiée)")
+
+    # Ajouter une vraie barre de couleur (légende)
+    cbar = fig.colorbar(cax)
+    cbar.set_label("Intensité du bruit (%)", fontsize=8)
+
+    img_heatmap = fig_to_img(fig)
+    elements.append(Image(img_heatmap, width=450, height=150))
+    elements.append(Spacer(1, 12))
+
+    # Explication pour l'utilisateur final
+    legend_text = """
+    <b>Légende des couleurs :</b><br/>
+    • <b>Bleu</b> : très faible pourcentage de bruit.<br/>
+    • <b>Vert</b> : bruit modéré.<br/>
+    • <b>Jaune</b> : bruit notable / zones actives.<br/>
+    • <b>Blanc</b> : pics importants de bruit.<br/><br/>
+    <b>Utilité :</b> La heatmap permet de voir rapidement quelles heures présentent les taux 
+    de bruit les plus élevés. Plus la couleur est claire, plus l'environnement sonore a été perturbé.
+    """
+
+    elements.append(Paragraph(legend_text, styles["Normal"]))
+    elements.append(Spacer(1, 20))
+
+
+    # BUILD PDF
+    doc.build(elements)
+    buffer.seek(0)
+    return buffer
+# ========================================
 
 if data:
     stats = data["stats"]
@@ -114,15 +248,22 @@ st.markdown("*Votre diagnostic de performance sonore intelligent*")
 col_info1, col_info2 = st.columns([3, 1])
 with col_info1:
     st.caption(f"📍 {logement['nom']} - {piece['nom']}")
+pdf_file = None
+
 with col_info2:
     if st.button("📄 Générer PDF"):
-        pdf_file = generate_pdf(data)
-        st.download_button(
-            "Télécharger le PDF",
-            data=pdf_file,
-            file_name="rapport_dps.pdf",
-            mime="application/pdf",
-        )
+        pdf_file = generate_pdf_with_graphs(data)
+        st.success("✅ PDF généré ! Vous pouvez maintenant le télécharger.")
+
+    st.download_button(
+        "Télécharger le PDF",
+        data=pdf_file if pdf_file else b"",
+        file_name="rapport_dps.pdf",
+        mime="application/pdf",
+        disabled=pdf_file is None,
+    )
+
+
 st.divider()
 
 # ========================================
