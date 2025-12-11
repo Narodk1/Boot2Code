@@ -835,15 +835,16 @@ with tab2:
 
 with tab3:
     st.header("🤖 Analyse IA")
-    st.info("🧠 Cliquez sur le bouton pour lancer l'analyse IA.")
 
-    if st.button("Lancer l'analyse IA"):
-        stream_response = interpret_json("sonalyse_advisor/dps_analysis_pi3_exemple.json", "sonalyse_advisor/context.txt","data/logement2.json")
+    try :
+        stream_response = interpret_json("sonalyse_advisor/dps_analysis_pi3_exemple.json", "sonalyse_advisor/context.txt","data/logement1.json")
 
         try:
             exec(stream_response)
         except Exception as e:
             st.error(f"Une erreur s'est produite lors de l'exécution du code : {e}")
+    except Exception as e:
+        st.error(f"Une erreur s'est produite lors de l'analyse IA : {e}")
 
 
 # FOOTER

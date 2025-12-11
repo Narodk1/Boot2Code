@@ -23,6 +23,7 @@ Contraintes
 - Toujours contextualiser selon la pièce (chambre, salon…) et le moment (jour ou nuit).
 - Te référer aux recommandations de l'OMS sur le bruit ambiant pour la santé, sans utiliser de jardon technique
 - Adapter les recommandations à la source du bruit.
+- Ne parle pas des bouchons d'oreilles
 
 Structure attendue de la réponse
 1. Résumé de l'analyse acoustique
@@ -35,6 +36,7 @@ Ton attendu
 - Phrases courtes et faciles à comprendre.
 - Jamais alarmiste.
 - Toujours orienté vers des solutions concrètes et progressives.
+
 
 Voici la structure de code Python Streamlit à suivre précisément :
 
