@@ -1,5 +1,5 @@
 import streamlit as st
-
+import json
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -15,6 +15,7 @@ from sonalyse_advisor.json_utils import (
     get_noise_type_percentage_hourly,
     get_noise_type_percentage_daily,
     get_average_db,
+    get_db_min_max_peak_by_hour,
 )
 
 from sonalyse_advisor.agent_backend import interpret_json
@@ -51,6 +52,7 @@ def load_data():
         noise_percentage = get_noise_type_percentage_daily(extracted_dominant_noise)
         noise_by_hour = get_noise_type_by_hour(extracted_dominant_noise)
         noise_percentage_hourly = get_noise_type_percentage_hourly(noise_by_hour)
+        db_min_max_peak_by_hourly = get_db_min_max_peak_by_hour(extracted_average_median, extracted_min_max_peak)
 
         # Retour uniforme
         return {
@@ -68,8 +70,8 @@ def load_data():
             },
             "grade": average_rating,
             "noise_percentage": noise_percentage,
-            "noise_by_hour": noise_by_hour,
             "noise_percentage_hourly": noise_percentage_hourly,
+            "db_min_max_peak_by_hourly": db_min_max_peak_by_hourly,
         }
 
     except Exception as e:
@@ -240,32 +242,26 @@ with tab2:
                         "percentage": noise_info["percentage"],
                     }
                 )
-
+        
         # Préparer données dB par heure
-        db_by_hour = {}
-        for item in data["average_median"]:
-            timestamp = item["timestamp"]
-            hour = int(timestamp.split(" ")[1].split(":")[0])
-            avg_db = item["average_dB"]
-
-            if hour not in db_by_hour:
-                db_by_hour[hour] = []
-            db_by_hour[hour].append(avg_db)
+        db_min_max_peak_by_hourly = data.get("db_min_max_peak_by_hourly","")
 
         timeline_data = []
-        for hour in sorted(db_by_hour.keys()):
-            values = db_by_hour[hour]
+        for hour in sorted(db_min_max_peak_by_hourly.keys()):
+            values = db_min_max_peak_by_hourly[hour]
             timeline_data.append(
                 {
                     "hour": hour,
-                    "value": sum(values) / len(values),
-                    "min": min(values),
-                    "max": max(values),
+                    "value": values["average_dB"],
+                    "min": values["min_dB"],
+                    "max": values["max_dB"],
+                    "peak": values["peak_dB"],
                 }
             )
 
         # Convertir en JSON pour JavaScript
         timeline_json = json.dumps(timeline_data)
+        print(timeline_json)
         noise_daily_json = json.dumps(
             [{"category": k, "value": v} for k, v in data["noise_percentage"].items()]
         )
