@@ -81,7 +81,23 @@ data = load_data()
 # ========================================
 
 def generate_pdf(data):
-    pass
+    """
+    Génère un PDF du rapport DPS.
+    Cette fonction sera remplie plus tard.(Par driss)
+
+    Paramètres :
+        data (dict) : données complètes retournées par load_data()
+
+    Étapes à implémenter :  genere pdf vide 
+        1. Créer un buffer mémoire (BytesIO) plus facile
+        2. Créer un document PDF ReportLab
+        4. Construire le PDF 
+        5. Retourner le buffer
+
+    Retour :
+        BytesIO : PDF généré
+    """
+    pass  # La logique sera ajoutée plus tard
 
 if data:
     stats = data["stats"]
@@ -206,33 +222,38 @@ with tab2:
         hourly_data = []
         for hour in range(24):
             hour_str = str(hour).zfill(2)
-            if hour_str in data.get('noise_percentage_hourly', {}):
-                noise_info = data['noise_percentage_hourly'][hour_str]
-                hourly_data.append({
-                    'hour': hour,
-                    'noise_type': noise_info['noise_type'],
-                    'percentage': noise_info['percentage']
-                })
+            if hour_str in data.get("noise_percentage_hourly", {}):
+                noise_info = data["noise_percentage_hourly"][hour_str]
+                hourly_data.append(
+                    {
+                        "hour": hour,
+                        "noise_type": noise_info["noise_type"],
+                        "percentage": noise_info["percentage"],
+                    }
+                )
+        
+        # Préparer données dB par heure
+        db_min_max_peak_by_hourly = data.get("db_min_max_peak_by_hourly","")
 
-        db_by_hour = {}
-        for item in data['average_median']:
-            timestamp = item['timestamp']
-            hour = int(timestamp.split(' ')[1].split(':')[0])
-            avg_db = item['average_dB']
-            db_by_hour.setdefault(hour, []).append(avg_db)
+        timeline_data = []
+        for hour in sorted(db_min_max_peak_by_hourly.keys()):
+            values = db_min_max_peak_by_hourly[hour]
+            timeline_data.append(
+                {
+                    "hour": hour,
+                    "value": values["average_dB"],
+                    "min": values["min_dB"],
+                    "max": values["max_dB"],
+                    "peak": values["peak_dB"],
+                }
+            )
 
-        timeline_data = [{
-            'hour': h,
-            'value': sum(v)/len(v),
-            'min': min(v),
-            'max': max(v)
-        } for h, v in db_by_hour.items()]
-
-        # Données pour le camembert
-        pie_data = [
-            {'category': k, 'value': v}
-            for k, v in data['noise_percentage'].items()
-        ]
+        # Convertir en JSON pour JavaScript
+        timeline_json = json.dumps(timeline_data)
+        print(timeline_json)
+        noise_daily_json = json.dumps(
+            [{"category": k, "value": v} for k, v in data["noise_percentage"].items()]
+        )
 
         # CORRECTION ICI : Vérifier la structure de noise_by_hour
         heatmap_rows = []
@@ -889,14 +910,6 @@ with tab3:
             exec(stream_response)
         except Exception as e:
             st.error(f"Une erreur s'est produite lors de l'exécution du code : {e}")
-    st.info("🧠 L'agent IA sera connecté ici (Anthropic/Groq)")
-    
-    if data:
-        st.subheader("📊 Données disponibles pour l'analyse:")
-        st.write(f"- {len(data['ratings'])} mesures de rating")
-        st.write(f"- Note moyenne calculée: **{grade}**")
-        st.write(f"- Niveau sonore moyen: **{stats['avg_db']:.1f} dB**")
-        st.write(f"- Types de bruits détectés: {len(data['noise_percentage'])}")
 
 # ========================================
 # TAB 4 — RECOMMANDATIONS
