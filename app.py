@@ -249,13 +249,11 @@ with tab2:
                 }
             )
 
-        # Convertir en JSON pour JavaScript
-        timeline_json = json.dumps(timeline_data)
-        print(timeline_json)
-        noise_daily_json = json.dumps(
-            [{"category": k, "value": v} for k, v in data["noise_percentage"].items()]
-        )
-
+        pie_data = [
+            {'category': k, 'value': v}
+            for k, v in data['noise_percentage'].items()
+        ]
+        
         # CORRECTION ICI : Vérifier la structure de noise_by_hour
         heatmap_rows = []
         for hour in range(24):
@@ -289,7 +287,6 @@ with tab2:
 
         # Convertir en JSON pour JavaScript
         timeline_json = json.dumps(timeline_data)
-        print(timeline_json)
         pie_json = json.dumps(pie_data)
         heatmap_json = json.dumps(heatmap_rows)
         
