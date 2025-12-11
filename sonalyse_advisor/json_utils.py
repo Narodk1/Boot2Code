@@ -201,7 +201,7 @@ def get_average_db(extracted_average_median: list) -> float:
 
 
 if __name__ == "__main__":
-    data = load_json("./dps_analysis_pi3_exemple.json")
+    data = load_json("./data/dps_analysis_pi3_exemple.json")
     print(len(data))
     (
         extracted_rating,
