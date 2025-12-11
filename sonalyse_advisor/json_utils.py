@@ -7,7 +7,7 @@ def load_json(json_filename: str) -> dict:
     with open(json_filename, "r") as file:
         data = json.load(file)
 
-    return data[:5]
+    return data
 
 
 def json_extract_info(json_data: list) -> tuple:
@@ -111,7 +111,7 @@ def get_noise_type_by_hour(extracted_dominant_noise: list) -> dict:
     return noise_type_by_hour
 
 
-def get_noise_type_percentage_hourly(noise_type_by_hour: dict) -> dict:
+def get_noise_type_db_hourly(noise_type_by_hour: dict) -> dict:
     """Get the most common noise type per hour with its percentage.
 
     Args:
@@ -173,8 +173,11 @@ def get_noise_type_percentage_daily(extracted_dominant_noise: list) -> dict:
         noise_type: round((count / total_count) * 100, 1)
         for noise_type, count in noise_type_count.items()
     }
+    
+    sorted_items = sorted(noise_type_percentage.items(), key=lambda x: x[1], reverse=True)
+    top_5 = dict(sorted_items[:5])
 
-    return noise_type_percentage
+    return top_5
 
 
 def get_average_db(extracted_average_median: list) -> float:
@@ -197,12 +200,83 @@ def get_average_db(extracted_average_median: list) -> float:
     if count == 0:
         return 0
 
-    return total_db / count
+    return round(total_db / count, 1)
+
+def db_per_hour(extracted_average_median: list) -> dict:
+    """Calculate the average dB for each hour from the JSON data.
+
+    Args:
+        extracted_average_median : list : List of average and median dB values extracted from JSON
 
 
-if __name__ == "__main__":
-    data = load_json("./dps_analysis_pi3_exemple.json")
-    print(len(data))
+    Returns:
+    dict : Dictionary with hour as keys and average dB as values.
+    """
+    db_by_hour = {}
+    count_by_hour = {}
+
+    for item in extracted_average_median:
+        timestamp = item.get("timestamp")
+        hour = timestamp.split(" ")[1].split(":")[0]
+        avg_db = item.get("average_dB")
+
+        if hour not in db_by_hour:
+            db_by_hour[hour] = 0
+            count_by_hour[hour] = 0
+
+        if avg_db is not None:
+            db_by_hour[hour] += avg_db
+            count_by_hour[hour] += 1
+
+    average_db_by_hour = {}
+    for hour in db_by_hour:
+        if count_by_hour[hour] > 0:
+            average_db_by_hour[hour] = round(db_by_hour[hour] / count_by_hour[hour], 1)
+        else:
+            average_db_by_hour[hour] = 0
+
+    return average_db_by_hour
+def get_min_max_peak_per_hour(extracted_min_max_peak: list) -> dict:
+    """Calculate the min, max, and peak dB for each hour from the JSON data.
+
+    Args:
+        extracted_min_max_peak : list : List of min, max, and peak dB values extracted from JSON
+
+    Returns:
+        dict : Dictionary with hour as keys and a dictionary of min, max, and peak dB as values.
+    """
+    min_max_peak_by_hour = {}
+
+    for item in extracted_min_max_peak:
+        timestamp = item.get("timestamp")
+        hour = timestamp.split(" ")[1].split(":")[0]
+        min_dB = item.get("min_dB")
+        max_dB = item.get("max_dB")
+        peak_dB = item.get("peak_dB")
+
+        if hour not in min_max_peak_by_hour:
+            min_max_peak_by_hour[hour] = {
+                "min_dB": None,
+                "max_dB": None,
+                "peak_dB": None,
+            }
+
+        if min_dB is not None:
+            if min_max_peak_by_hour[hour]["min_dB"] is None or min_dB < min_max_peak_by_hour[hour]["min_dB"]:
+                min_max_peak_by_hour[hour]["min_dB"] = min_dB
+
+        if max_dB is not None:
+            if min_max_peak_by_hour[hour]["max_dB"] is None or max_dB > min_max_peak_by_hour[hour]["max_dB"]:
+                min_max_peak_by_hour[hour]["max_dB"] = max_dB
+
+        if peak_dB is not None:
+            if min_max_peak_by_hour[hour]["peak_dB"] is None or peak_dB > min_max_peak_by_hour[hour]["peak_dB"]:
+                min_max_peak_by_hour[hour]["peak_dB"] = peak_dB
+
+    return min_max_peak_by_hour
+
+def gather_all_extracted_data(json_path: str):
+    data = load_json(json_path)
     (
         extracted_rating,
         extracted_dominant_noise,
@@ -212,15 +286,41 @@ if __name__ == "__main__":
     ) = json_extract_info(data)
 
     average_db = get_average_db(extracted_average_median)
-    print("Average dB per day:", average_db)
+    #print("Average dB per day:", average_db)
 
     average_rating = get_average_rating(extracted_rating)
-    print("Average Rating daily:", average_rating)
+    #print("Average Rating daily:", average_rating)
+
+    hourly_db = db_per_hour(extracted_average_median)
+    #print("dB per hour:", hourly_db)
+
+    get_min_max_peak_hourly = get_min_max_peak_per_hour(extracted_min_max_peak)
+    #print("Min, Max, Peak dB per hour:", min_max_peak)
 
     noise_percentage = get_noise_type_percentage_daily(extracted_dominant_noise)
-    print("Noise Type daily Percentage :", noise_percentage)
+    #print("Noise Type daily Percentage :", noise_percentage)
 
     noise_by_hour = get_noise_type_by_hour(extracted_dominant_noise)
+    noise_percentage_hourly = get_noise_type_db_hourly(noise_by_hour)
 
-    noise_percentage_hourly = get_noise_type_percentage_hourly(noise_by_hour)
-    print("Noise Type Percentage Hourly:", noise_percentage_hourly["10"])
+
+
+    all_data = {
+        "daily": {
+            "average_daily_db": average_db,
+            "average_daily_rating": average_rating,
+            "noise_daily_percentage": noise_percentage,  # Already top 5
+        },
+        "hourly": {
+            "noise_hourly_percentage": noise_percentage_hourly,
+            "db_per_hour": hourly_db,
+            "min_max_peak_per_hour": get_min_max_peak_hourly,
+        },
+
+    }
+    return all_data
+
+
+# if __name__ == "__main__":
+#     # data = load_json("./dps_analysis_pi3_exemple.json")
+    

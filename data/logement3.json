@@ -1,0 +1,29 @@
+[{
+    "id": 3,
+    "nom_du_logement": "Studio Moderne",
+    "adresse": "8 Rue Victor Hugo",
+    "code_postal": "69002",
+    "ville": "Lyon",
+    "type_de_logement": "appartement",
+    "etage": 2,
+    "typologie": "Studio",
+    "plan_du_logement": "plan_studio_moderne.pdf",
+    "pieces": [
+      {
+        "nom_de_la_piece": "Pièce principale",
+        "surface_m2": 22.0,
+        "type": "Salon"
+      },
+      {
+        "nom_de_la_piece": "Cuisine",
+        "surface_m2": 4.5,
+        "type": "cuisine"
+      },
+      {
+        "nom_de_la_piece": "Salle d'eau",
+        "surface_m2": 3.5,
+        "type": "salle de bain"
+      }
+    ]
+  } 
+]
