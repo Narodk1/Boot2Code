@@ -580,7 +580,6 @@ with tab4:
     """
     )
 
-
 # FOOTER
 st.divider()
 st.caption("🚀 Sonalyze Advisor v1.0 - Hackathon IA Boot2Code")
