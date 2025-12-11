@@ -1,5 +1,5 @@
 import matplotlib
-matplotlib.use("Agg")
+matplotlib.use("Agg")#juuste pour éviter un bug avec streamlit si t'as macos
 import streamlit as st
 import json
 from reportlab.platypus import SimpleDocTemplate, Image, Paragraph, Spacer
@@ -7,8 +7,11 @@ from reportlab.lib.styles import getSampleStyleSheet
 import plotly.graph_objects as go
 import streamlit.components.v1 as components
 from reportlab.lib.pagesizes import A4
+from sonalyse_advisor.agent_backend import interpret_json
+import re
+from reportlab.lib.enums import TA_LEFT
+from reportlab.lib.styles import ParagraphStyle
 import matplotlib.pyplot as plt
-from reportlab.lib.colors import HexColor
 import io
 
 # Import vos fonctions existantes
@@ -92,6 +95,20 @@ def fig_to_img(fig):
     buf.seek(0)
     plt.close(fig)
     return buf
+
+ia_response=interpret_json(
+    "sonalyse_advisor/dps_analysis_pi3_exemple.json",
+    "sonalyse_advisor/context.txt","data/logement1.json")
+
+# Extraire uniquement la partie "3. Recommandations"
+match = re.search(r"3\. Recommandations\s*(.*?)(?:\n\d+\..*|$)", ia_response, re.DOTALL)
+recommendations_text = match.group(1).strip() if match else "Aucune recommandation disponible."
+
+# Enlever caractères spéciaux et bouts de code
+recommendations_text = re.sub(r"[^\w\s\-\.,:]", "", recommendations_text)
+recommendations_text = recommendations_text.replace("\n", "<br/>")
+
+
 
 def generate_pdf_with_graphs(data):
     buffer = io.BytesIO()
@@ -212,6 +229,11 @@ def generate_pdf_with_graphs(data):
     """
 
     elements.append(Paragraph(legend_text, styles["Normal"]))
+    elements.append(Spacer(1, 20))
+    
+    elements.append(Paragraph("<b>Recommandations :</b>", styles["Heading2"]))
+    elements.append(Spacer(1, 8))
+    elements.append(Paragraph(recommendations_text, styles["Normal"]))
     elements.append(Spacer(1, 20))
 
 

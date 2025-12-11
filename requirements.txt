@@ -11,3 +11,4 @@ groq
 gspread
 dotenv
 matplotlib
+reportlab
