@@ -89,15 +89,10 @@ def generate_pdf(data):
     Paramètres :
         data (dict) : données complètes retournées par load_data()
 
-    Étapes à implémenter :
+    Étapes à implémenter :  genere pdf vide 
         1. Créer un buffer mémoire (BytesIO) plus facile
         2. Créer un document PDF ReportLab
-        3. Ajouter les sections :
-            - Synthèse
-            - Graphiques exportés (optionnel)
-            - Tableau des bruits
-            - Recommandations
-        4. Construire le PDF
+        4. Construire le PDF 
         5. Retourner le buffer
 
     Retour :
@@ -108,7 +103,7 @@ def generate_pdf(data):
 if data:
     stats = data["stats"]
     grade = data["grade"]
-    st.success(f"✅ {len(data['ratings'])} mesures chargées depuis vos données réelles")
+    st.success(f"✅ {len(data['ratings'])} mesures chargées depuis données réelles")
 else:
     # Fallback données test
     stats = {
@@ -136,7 +131,9 @@ with col_info1:
 with col_info2:
     if st.button("📄 Générer PDF"):
      pdf_file = generate_pdf(data)
-  
+        #st.success("✅ Rapport PDF généré avec succès ! (fonctionnalité à venir)")
+     #msg pour driss : c la ou ca se passe action genere pdf 
+
 st.divider()
 
 # ========================================
@@ -213,10 +210,6 @@ with tab1:
                     """,
                         unsafe_allow_html=True,
                     )
-
-
-
-
 
 # ========================================
 # TAB 3 — VISUALISATIONS D3.js
