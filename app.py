@@ -1,8 +1,10 @@
 import streamlit as st
-import json
+
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+
+from sonalyse_advisor.agent_backend import interpret_json
 
 st.set_page_config(page_title="Sonalyze Diagnostic", page_icon="🔊", layout="wide")
 
@@ -107,8 +109,17 @@ with tab2:
 # ========================================
 
 with tab3:
-    st.header("🤖 Analyse IA (placeholder)")
-    st.info("🧠 L’analyse IA sera intégrée ici après connexion au modèle Groq/Anthropic.")
+    st.header("🤖 Analyse IA")
+    st.info("🧠 Cliquez sur le bouton pour lancer l'analyse IA.")
+
+    if st.button("Lancer l'analyse IA"):
+        stream_response = interpret_json("sonalyse_advisor/dps_analysis_pi3_exemple.json", "sonalyse_advisor/context.txt","data/logement2.json")
+
+        # Execute the Python code dynamically
+        try:
+            exec(stream_response)
+        except Exception as e:
+            st.error(f"Une erreur s'est produite lors de l'exécution du code : {e}")
 
 # ========================================
 # TAB 4 — RECOMMANDATIONS #  todo 
@@ -120,6 +131,7 @@ with tab4:
     st.write("- Installer des joints de fenêtre")
     st.write("- Rideaux phoniques")
     st.write("- Survitrage")
+
 
 # FOOTER
 st.divider()
