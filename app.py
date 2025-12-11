@@ -1,10 +1,15 @@
+import matplotlib
+matplotlib.use("Agg")
 import streamlit as st
 import json
-import pandas as pd
-import plotly.express as px
+from reportlab.platypus import SimpleDocTemplate, Image, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet
 import plotly.graph_objects as go
-from datetime import datetime
 import streamlit.components.v1 as components
+from reportlab.lib.pagesizes import A4
+import matplotlib.pyplot as plt
+from reportlab.lib.colors import HexColor
+import io
 
 # Import vos fonctions existantes
 from sonalyse_advisor.json_utils import (
@@ -81,24 +86,140 @@ data = load_data()
 # TAB 2 — FCT PDF GENERATION
 # ========================================
 
-def generate_pdf(data):
+def fig_to_img(fig):
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", bbox_inches='tight', dpi=150)
+    buf.seek(0)
+    plt.close(fig)
+    return buf
+
+def generate_pdf_with_graphs(data):
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4)
+    elements = []
+    styles = getSampleStyleSheet()
+
+    # TITRE
+    elements.append(Paragraph("<b>Diagnostic Sonalyze - Rapport</b>", styles["Title"]))
+    elements.append(Spacer(1, 20))
+    
+    grade = data["grade"]
+
+    grade_color = {
+        "A": "#00AA00",
+        "B": "#55CC00",
+        "C": "#AADD00",
+        "D": "#FFEE00",
+        "E": "#FFAA00",
+        "F": "#FF5500",
+        "G": "#DD0000",
+    }.get(grade, "#AADD00")
+
+    elements.append(Paragraph(
+        f"<para alignment='center'><font size=22><b>Note de performance : "
+        f"<font color='{grade_color}'>{grade}</font></b></font></para>",
+        styles["Title"]
+    ))
+    elements.append(Spacer(1, 20))
+
+    # =====================
+    # 📊 GRAPHE : Timeline
+    # =====================
+    timeline_data = data["db_min_max_peak_by_hourly"]
+
+    fig, ax = plt.subplots(figsize=(8, 3))
+    hours = sorted(timeline_data.keys())
+    values = [timeline_data[h]["average_dB"] for h in hours]
+    ax.plot(hours, values)
+    ax.set_title("Évolution du niveau sonore (24h)")
+    ax.set_xlabel("Heure")
+    ax.set_ylabel("dB")
+
+    img_timeline = fig_to_img(fig)
+    elements.append(Image(img_timeline, width=450, height=200))
+    elements.append(Spacer(1, 20))
+    
+        # ======================
+    # 🌐 GRAPHE RADAR : Sources de bruit
+    # ======================
+    labels = list(data["noise_percentage"].keys())
+    values = list(data["noise_percentage"].values())
+
+    # fermer le radar (dernier = premier)
+    values += values[:1]
+    angles = [n / float(len(labels)) * 2 * 3.1415926 for n in range(len(labels))]
+    angles += angles[:1]
+
+    fig = plt.figure(figsize=(4, 4))
+    ax = plt.subplot(111, polar=True)
+
+    # Tracé
+    ax.plot(angles, values, linewidth=2)
+    ax.fill(angles, values, alpha=0.3)
+
+    # Label des axes
+    ax.set_xticks(angles[:-1])
+    ax.set_xticklabels(labels)
+
+    # Valeurs numériques
+    for i, v in enumerate(values[:-1]):
+        ax.text(angles[i], v + 3, f"{v:.1f}%", fontsize=9, ha='center')
+
+    ax.set_title("Radar des sources de bruit (en %)")
+
+    img_radar = fig_to_img(fig)
+    elements.append(Image(img_radar, width=300, height=300))
+    elements.append(Spacer(1, 12))
+
+    legend_text = "<br/>".join(
+        [f"<b>{k.title()}</b> : {v:.1f}% du temps" for k, v in data["noise_percentage"].items()]
+    )
+    elements.append(Paragraph(f"<b>Légende des sources de bruit :</b><br/>{legend_text}", styles["Normal"]))
+    elements.append(Spacer(1, 20))
+
+    # =====================
+    # 🔥 GRAPHE : Heatmap
+    # =====================
+    heatmap = data["noise_percentage_hourly"]
+
+    fig, ax = plt.subplots(figsize=(8, 3))
+
+    # Construire la matrice
+    matrix = [v["percentage"] for v in heatmap.values()]
+
+    # Heatmap
+    cax = ax.imshow([matrix], aspect="auto", cmap="viridis")
+
+    ax.set_title("Heatmap des bruits (simplifiée)")
+
+    # Ajouter une vraie barre de couleur (légende)
+    cbar = fig.colorbar(cax)
+    cbar.set_label("Intensité du bruit (%)", fontsize=8)
+
+    img_heatmap = fig_to_img(fig)
+    elements.append(Image(img_heatmap, width=450, height=150))
+    elements.append(Spacer(1, 12))
+
+    # Explication pour l'utilisateur final
+    legend_text = """
+    <b>Légende des couleurs :</b><br/>
+    • <b>Bleu</b> : très faible pourcentage de bruit.<br/>
+    • <b>Vert</b> : bruit modéré.<br/>
+    • <b>Jaune</b> : bruit notable / zones actives.<br/>
+    • <b>Blanc</b> : pics importants de bruit.<br/><br/>
+    <b>Utilité :</b> La heatmap permet de voir rapidement quelles heures présentent les taux 
+    de bruit les plus élevés. Plus la couleur est claire, plus l'environnement sonore a été perturbé.
     """
-    Génère un PDF du rapport DPS.
-    Cette fonction sera remplie plus tard.(Par driss)
 
-    Paramètres :
-        data (dict) : données complètes retournées par load_data()
+    elements.append(Paragraph(legend_text, styles["Normal"]))
+    elements.append(Spacer(1, 20))
 
-    Étapes à implémenter :  genere pdf vide 
-        1. Créer un buffer mémoire (BytesIO) plus facile
-        2. Créer un document PDF ReportLab
-        4. Construire le PDF 
-        5. Retourner le buffer
 
-    Retour :
-        BytesIO : PDF généré
-    """
-    pass  # La logique sera ajoutée plus tard
+    # BUILD PDF
+    doc.build(elements)
+    buffer.seek(0)
+    return buffer
+# ========================================
 
 if data:
     stats = data["stats"]
@@ -127,23 +248,30 @@ st.markdown("*Votre diagnostic de performance sonore intelligent*")
 col_info1, col_info2 = st.columns([3, 1])
 with col_info1:
     st.caption(f"📍 {logement['nom']} - {piece['nom']}")
+pdf_file = None
+
 with col_info2:
     if st.button("📄 Générer PDF"):
-        pdf_file = generate_pdf(data)
-        st.download_button(
-            "Télécharger le PDF",
-            data=pdf_file,
-            file_name="rapport_dps.pdf",
-            mime="application/pdf",
-        )
+        pdf_file = generate_pdf_with_graphs(data)
+        st.success("✅ PDF généré ! Vous pouvez maintenant le télécharger.")
+
+    st.download_button(
+        "Télécharger le PDF",
+        data=pdf_file if pdf_file else b"",
+        file_name="rapport_dps.pdf",
+        mime="application/pdf",
+        disabled=pdf_file is None,
+    )
+
+
 st.divider()
 
 # ========================================
 # 📑 TABS
 # ========================================
 
-tab1, tab2, tab3, tab4 = st.tabs(
-    ["📊 Synthèse", "📈 Visualisations D3.js", "🤖 Analyse IA", "💡 Recommandations"]
+tab1, tab2, tab3 = st.tabs(
+    ["📊 Synthèse", "📈 Visualisations D3.js", "🤖 Analyse IA et Recommandation"]
 )
 
 # ========================================
@@ -212,29 +340,15 @@ with tab1:
                     )
 
 # ========================================
-# TAB 3 — VISUALISATIONS D3.js
+# TAB 2 — VISUALISATIONS D3.js
 # ========================================
 
 with tab2:
     st.header("📈 Visualisations Interactives D3.js")
     
     if data:
-        # Préparation des données
-        hourly_data = []
-        for hour in range(24):
-            hour_str = str(hour).zfill(2)
-            if hour_str in data.get("noise_percentage_hourly", {}):
-                noise_info = data["noise_percentage_hourly"][hour_str]
-                hourly_data.append(
-                    {
-                        "hour": hour,
-                        "noise_type": noise_info["noise_type"],
-                        "percentage": noise_info["percentage"],
-                    }
-                )
-        
         # Préparer données dB par heure
-        db_min_max_peak_by_hourly = data.get("db_min_max_peak_by_hourly","")
+        db_min_max_peak_by_hourly = data.get("db_min_max_peak_by_hourly", {})
 
         timeline_data = []
         for hour in sorted(db_min_max_peak_by_hourly.keys()):
@@ -254,85 +368,52 @@ with tab2:
             for k, v in data['noise_percentage'].items()
         ]
         
-        # CORRECTION ICI : Vérifier la structure de noise_by_hour
+        # Préparation des données pour la heatmap (CORRIGÉ)
         heatmap_rows = []
-        for hour in range(24):
-            hour_str = str(hour).zfill(2)
-            hour_data = data["noise_by_hour"].get(hour_str, [])
+        
+        # DEBUG  pour voir la structure de noise_by_hour
+        # st.write("🔍 Debug - Structure de noise_by_hour:")
+      
+        
+        if isinstance(data["noise_by_hour"], dict):
+            #st.write(f"Nombre d'heures: {len(data['noise_by_hour'])}")
             
-            # Si hour_data est une liste de dictionnaires
-            if isinstance(hour_data, list) and hour_data and isinstance(hour_data[0], dict):
-                for e in hour_data:
-                    heatmap_rows.append({
-                        "hour": hour,
-                        "category": e.get("noise_type", "Unknown"),
-                        "value": e.get("level_dB", 0)
-                    })
-            # Si hour_data est une liste de chaînes (noms de bruit)
-            elif isinstance(hour_data, list) and hour_data and isinstance(hour_data[0], str):
-                for e in hour_data:
-                    heatmap_rows.append({
-                        "hour": hour,
-                        "category": e,
-                        "value": 50  # Valeur par défaut
-                    })
-            # Si hour_data est un dictionnaire directement
-            elif isinstance(hour_data, dict):
-                for noise_type, level in hour_data.items():
-                    heatmap_rows.append({
-                        "hour": hour,
-                        "category": noise_type,
-                        "value": level if isinstance(level, (int, float)) else 50
-                    })
-
+            # Afficher les premières heures
+            for hour_str, hour_data in list(data["noise_by_hour"].items())[:10]:
+                
+                # Traitement pour la heatmap
+                hour = int(hour_str) if hour_str.isdigit() else 0
+                
+                if isinstance(hour_data, list):
+                    for item in hour_data:
+                        if isinstance(item, str):
+                            
+                            intensity = 29  # Valeur par défaut
+                            
+                            hour_str_padded = str(hour).zfill(2)
+                            if hour_str_padded in data.get("noise_percentage_hourly", {}):
+                                noise_info = data["noise_percentage_hourly"][hour_str_padded]
+                                if noise_info.get("noise_type") == item:
+                                    intensity = noise_info.get("percentage", 50) * 0.8  # Convertir % en intensité
+                            
+                            heatmap_rows.append({
+                                "hour": hour,
+                                "category": item,
+                                "value": intensity
+                            })
+        
+        heatmap_json = json.dumps(heatmap_rows)
+        
         # Convertir en JSON pour JavaScript
         timeline_json = json.dumps(timeline_data)
         pie_json = json.dumps(pie_data)
-        heatmap_json = json.dumps(heatmap_rows)
-        
-        # Données pour le tableau détaillé
-        table_data = []
-        for hour in range(24):
-            hour_str = str(hour).zfill(2)
-            hour_data = data["noise_by_hour"].get(hour_str, [])
-            
-            # Si hour_data est une liste de dictionnaires
-            if isinstance(hour_data, list) and hour_data and isinstance(hour_data[0], dict):
-                for noise in hour_data:
-                    table_data.append({
-                        "hour": hour_str + ":00",
-                        "type": noise.get("noise_type", "Unknown"),
-                        "level_dB": noise.get("level_dB", 0),
-                        "duration_min": noise.get("duration_min", 0)
-                    })
-            # Si hour_data est une liste de chaînes
-            elif isinstance(hour_data, list) and hour_data and isinstance(hour_data[0], str):
-                for noise_type in hour_data:
-                    table_data.append({
-                        "hour": hour_str + ":00",
-                        "type": noise_type,
-                        "level_dB": 50,
-                        "duration_min": 0
-                    })
-            # Si hour_data est un dictionnaire
-            elif isinstance(hour_data, dict):
-                for noise_type, level in hour_data.items():
-                    table_data.append({
-                        "hour": hour_str + ":00",
-                        "type": noise_type,
-                        "level_dB": level if isinstance(level, (int, float)) else 50,
-                        "duration_min": 0
-                    })
-        
-        table_json = json.dumps(table_data[:50])  # Limiter à 50 lignes
 
     else:
         timeline_json = "[]"
         pie_json = "[]"
         heatmap_json = "[]"
-        table_json = "[]"
 
-    # HTML avec D3.js
+    # HTML avec D3.js - AVEC HEATMAP
     d3_html = f"""
     <!DOCTYPE html>
     <html>
@@ -373,25 +454,6 @@ with tab2:
                 display: block;
                 margin: 0 auto;
             }}
-            table {{
-                width: 100%;
-                border-collapse: collapse;
-                margin-top: 15px;
-            }}
-            th {{
-                background-color: #667eea;
-                color: white;
-                padding: 12px;
-                text-align: left;
-                font-weight: 600;
-            }}
-            td {{
-                padding: 10px;
-                border-bottom: 1px solid #e0e0e0;
-            }}
-            tr:hover {{
-                background-color: #f5f5f5;
-            }}
             .heatmap-cell {{
                 cursor: pointer;
             }}
@@ -413,16 +475,6 @@ with tab2:
         </div>
 
         <div class="chart-container">
-            <div class="chart-title">🍰 Répartition des Sources de Bruit (Camembert)</div>
-            <div id="pie-chart"></div>
-        </div>
-
-        <div class="chart-container">
-            <div class="chart-title">📋 Tableau des Bruits par Heure</div>
-            <div id="table-container"></div>
-        </div>
-
-        <div class="chart-container">
             <div class="chart-title">🔥 Heatmap des Bruits (Heure × Type)</div>
             <div id="heatmap"></div>
         </div>
@@ -433,257 +485,9 @@ with tab2:
             // Données depuis Python
             const timelineData = {timeline_json};
             const pieData = {pie_json};
-            const tableData = {table_json};
             const heatmapData = {heatmap_json};
 
-            // Camembert (Pie Chart)
-            function drawPieChart() {{
-                if (pieData.length === 0) return;
-                
-                const width = 500;
-                const height = 400;
-                const radius = Math.min(width, height) / 2;
-                
-                const svg = d3.select("#pie-chart")
-                    .append("svg")
-                    .attr("width", width)
-                    .attr("height", height)
-                    .append("g")
-                    .attr("transform", `translate(${{width/2}},${{height/2}})`);
-                
-                // Palette de couleurs
-                const color = d3.scaleOrdinal()
-                    .domain(pieData.map(d => d.category))
-                    .range(["#FF6B6B", "#4ECDC4", "#45B7D1", "#96CEB4", "#FFEAA7", "#667eea", "#DDA0DD"]);
-                
-                // Générer les arcs
-                const pie = d3.pie()
-                    .value(d => d.value)
-                    .sort(null);
-                
-                const arc = d3.arc()
-                    .innerRadius(0)
-                    .outerRadius(radius);
-                
-                // Dessiner les arcs
-                const arcs = svg.selectAll(".arc")
-                    .data(pie(pieData))
-                    .enter()
-                    .append("g")
-                    .attr("class", "arc");
-                
-                arcs.append("path")
-                    .attr("d", arc)
-                    .attr("fill", d => color(d.data.category))
-                    .attr("stroke", "white")
-                    .attr("stroke-width", 2)
-                    .on("mouseover", function(event, d) {{
-                        d3.select(this)
-                            .transition()
-                            .duration(200)
-                            .attr("transform", "scale(1.05)");
-                        
-                        tooltip
-                            .style("opacity", 1)
-                            .html(`<strong>${{d.data.category}}</strong><br/>${{d.data.value.toFixed(1)}}%`)
-                            .style("left", (event.pageX + 10) + "px")
-                            .style("top", (event.pageY - 30) + "px");
-                    }})
-                    .on("mouseout", function() {{
-                        d3.select(this)
-                            .transition()
-                            .duration(200)
-                            .attr("transform", "scale(1)");
-                        tooltip.style("opacity", 0);
-                    }});
-                
-                // Ajouter les labels
-                arcs.append("text")
-                    .attr("transform", d => `translate(${{arc.centroid(d)}})`)
-                    .attr("text-anchor", "middle")
-                    .attr("dy", "0.35em")
-                    .style("font-size", "12px")
-                    .style("font-weight", "bold")
-                    .text(d => d.data.category);
-            }}
-
-            // Tableau de données
-            function drawTable() {{
-                if (tableData.length === 0) {{
-                    d3.select("#table-container")
-                        .append("p")
-                        .text("Aucune donnée disponible");
-                    return;
-                }}
-                
-                const container = d3.select("#table-container");
-                
-                // Créer le tableau
-                const table = container.append("table");
-                
-                // En-tête
-                const thead = table.append("thead");
-                const headers = ["Heure", "Type de Bruit", "Niveau (dB)", "Durée (min)"];
-                
-                thead.append("tr")
-                    .selectAll("th")
-                    .data(headers)
-                    .enter()
-                    .append("th")
-                    .text(d => d);
-                
-                // Corps du tableau
-                const tbody = table.append("tbody");
-                
-                const rows = tbody.selectAll("tr")
-                    .data(tableData)
-                    .enter()
-                    .append("tr");
-                
-                // Cellules
-                rows.selectAll("td")
-                    .data(d => [d.hour, d.type, d.level_dB.toFixed(1), d.duration_min])
-                    .enter()
-                    .append("td")
-                    .text(d => d);
-                
-                // Colorer les lignes selon le niveau sonore
-                rows.style("background-color", d => {{
-                    if (d.level_dB > 70) return "#FF6B6B30";
-                    if (d.level_dB > 50) return "#FFEAA730";
-                    return "#96CEB430";
-                }});
-            }}
-
-            // Heatmap
-            function drawHeatmap() {{
-                if (heatmapData.length === 0) return;
-                
-                const margin = {{top: 40, right: 80, bottom: 40, left: 80}};
-                const width = 800 - margin.left - margin.right;
-                const height = 400 - margin.top - margin.bottom;
-                
-                const svg = d3.select("#heatmap")
-                    .append("svg")
-                    .attr("width", width + margin.left + margin.right)
-                    .attr("height", height + margin.top + margin.bottom)
-                    .append("g")
-                    .attr("transform", `translate(${{margin.left}},${{margin.top}})`);
-                
-                // Extraire les catégories uniques et les heures
-                const categories = [...new Set(heatmapData.map(d => d.category))];
-                const hours = [...new Set(heatmapData.map(d => d.hour))].sort((a, b) => a - b);
-                
-                // Échelles
-                const x = d3.scaleBand()
-                    .domain(hours)
-                    .range([0, width])
-                    .padding(0.05);
-                
-                const y = d3.scaleBand()
-                    .domain(categories)
-                    .range([0, height])
-                    .padding(0.05);
-                
-                // Échelle de couleur
-                const maxValue = d3.max(heatmapData, d => d.value);
-                const colorScale = d3.scaleSequential()
-                    .domain([0, maxValue])
-                    .interpolator(d3.interpolateYlOrRd);
-                
-                // Créer les cellules
-                svg.selectAll()
-                    .data(heatmapData)
-                    .enter()
-                    .append("rect")
-                    .attr("class", "heatmap-cell")
-                    .attr("x", d => x(d.hour))
-                    .attr("y", d => y(d.category))
-                    .attr("width", x.bandwidth())
-                    .attr("height", y.bandwidth())
-                    .attr("fill", d => colorScale(d.value))
-                    .attr("stroke", "#fff")
-                    .attr("stroke-width", 1)
-                    .on("mouseover", function(event, d) {{
-                        tooltip
-                            .style("opacity", 1)
-                            .html(`Heure: ${{d.hour}}h<br/>
-                                   Type: ${{d.category}}<br/>
-                                   Niveau: ${{d.value.toFixed(1)}} dB`)
-                            .style("left", (event.pageX + 10) + "px")
-                            .style("top", (event.pageY - 30) + "px");
-                    }})
-                    .on("mouseout", () => tooltip.style("opacity", 0));
-                
-                // Axes
-                svg.append("g")
-                    .attr("transform", `translate(0,${{height}})`)
-                    .call(d3.axisBottom(x).tickFormat(d => d + "h"));
-                
-                svg.append("g")
-                    .call(d3.axisLeft(y));
-                
-                // Labels
-                svg.append("text")
-                    .attr("x", width / 2)
-                    .attr("y", height + 35)
-                    .style("text-anchor", "middle")
-                    .text("Heure de la journée");
-                
-                svg.append("text")
-                    .attr("transform", "rotate(-90)")
-                    .attr("x", -height / 2)
-                    .attr("y", -50)
-                    .style("text-anchor", "middle")
-                    .text("Type de bruit");
-                
-                // Légende
-                const legendWidth = 200;
-                const legendHeight = 20;
-                
-                const legend = svg.append("g")
-                    .attr("transform", `translate(${{width - legendWidth - 10}}, -30)`);
-                
-                const defs = legend.append("defs");
-                const linearGradient = defs.append("linearGradient")
-                    .attr("id", "linear-gradient");
-                
-                linearGradient.selectAll("stop")
-                    .data(colorScale.range().map((color, i, arr) => ({{
-                        offset: `${{100 * i / (arr.length - 1)}}%`,
-                        color: color
-                    }})))
-                    .enter()
-                    .append("stop")
-                    .attr("offset", d => d.offset)
-                    .attr("stop-color", d => d.color);
-                
-                legend.append("rect")
-                    .attr("width", legendWidth)
-                    .attr("height", legendHeight)
-                    .style("fill", "url(#linear-gradient)");
-                
-                legend.append("text")
-                    .attr("x", 0)
-                    .attr("y", -5)
-                    .style("font-size", "12px")
-                    .text("Niveau sonore (dB)");
-                
-                legend.append("text")
-                    .attr("x", 0)
-                    .attr("y", legendHeight + 15)
-                    .style("font-size", "10px")
-                    .text("0");
-                
-                legend.append("text")
-                    .attr("x", legendWidth)
-                    .attr("y", legendHeight + 15)
-                    .style("font-size", "10px")
-                    .style("text-anchor", "end")
-                    .text(maxValue.toFixed(0));
-            }}
-
-            // Timeline Chart (existant)
+            // Timeline Chart
             function drawTimeline() {{
                 if (timelineData.length === 0) return;
                 
@@ -790,7 +594,7 @@ with tab2:
                     .text("Niveau sonore (dB)");
             }}
 
-            // Radar Chart (existant)
+            // Radar Chart
             function drawRadar() {{
                 if (!pieData || pieData.length === 0) return;
                 
@@ -878,11 +682,144 @@ with tab2:
                 }});
             }}
 
+            // Heatmap
+            function drawHeatmap() {{
+                if (heatmapData.length === 0) {{
+                    d3.select("#heatmap")
+                        .append("p")
+                        .text("Données insuffisantes pour afficher la heatmap");
+                    return;
+                }}
+                
+                const margin = {{top: 40, right: 80, bottom: 40, left: 80}};
+                const width = 800 - margin.left - margin.right;
+                const height = 400 - margin.top - margin.bottom;
+                
+                const svg = d3.select("#heatmap")
+                    .append("svg")
+                    .attr("width", width + margin.left + margin.right)
+                    .attr("height", height + margin.top + margin.bottom)
+                    .append("g")
+                    .attr("transform", `translate(${{margin.left}},${{margin.top}})`);
+                
+                // Extraire les catégories uniques et les heures
+                const categories = [...new Set(heatmapData.map(d => d.category))];
+                const hours = [...new Set(heatmapData.map(d => d.hour))].sort((a, b) => a - b);
+                
+                if (categories.length === 0 || hours.length === 0) return;
+                
+                // Échelles
+                const x = d3.scaleBand()
+                    .domain(hours)
+                    .range([0, width])
+                    .padding(0.05);
+                
+                const y = d3.scaleBand()
+                    .domain(categories)
+                    .range([0, height])
+                    .padding(0.05);
+                
+                // Échelle de couleur
+                const maxValue = d3.max(heatmapData, d => d.value);
+                const colorScale = d3.scaleSequential()
+                    .domain([0, maxValue])
+                    .interpolator(d3.interpolateYlOrRd);
+                
+                // Créer les cellules
+                svg.selectAll()
+                    .data(heatmapData)
+                    .enter()
+                    .append("rect")
+                    .attr("class", "heatmap-cell")
+                    .attr("x", d => x(d.hour))
+                    .attr("y", d => y(d.category))
+                    .attr("width", x.bandwidth())
+                    .attr("height", y.bandwidth())
+                    .attr("fill", d => colorScale(d.value))
+                    .attr("stroke", "#fff")
+                    .attr("stroke-width", 1)
+                    .on("mouseover", function(event, d) {{
+                        tooltip
+                            .style("opacity", 1)
+                            .html(`Heure: ${{d.hour}}h<br/>
+                                   Type: ${{d.category}}<br/>
+                                   Intensité: ${{d.value.toFixed(1)}}`)
+                            .style("left", (event.pageX + 10) + "px")
+                            .style("top", (event.pageY - 30) + "px");
+                    }})
+                    .on("mouseout", () => tooltip.style("opacity", 0));
+                
+                // Axes
+                svg.append("g")
+                    .attr("transform", `translate(0,${{height}})`)
+                    .call(d3.axisBottom(x).tickFormat(d => d + "h"));
+                
+                svg.append("g")
+                    .call(d3.axisLeft(y));
+                
+                // Labels
+                svg.append("text")
+                    .attr("x", width / 2)
+                    .attr("y", height + 35)
+                    .style("text-anchor", "middle")
+                    .text("Heure de la journée");
+                
+                svg.append("text")
+                    .attr("transform", "rotate(-90)")
+                    .attr("x", -height / 2)
+                    .attr("y", -50)
+                    .style("text-anchor", "middle")
+                    .text("Type de bruit");
+                
+                // Légende
+                const legendWidth = 200;
+                const legendHeight = 20;
+                
+                const legend = svg.append("g")
+                    .attr("transform", `translate(${{width - legendWidth - 10}}, -30)`);
+                
+                const defs = legend.append("defs");
+                const linearGradient = defs.append("linearGradient")
+                    .attr("id", "linear-gradient");
+                
+                linearGradient.selectAll("stop")
+                    .data(colorScale.range().map((color, i, arr) => ({{
+                        offset: `${{100 * i / (arr.length - 1)}}%`,
+                        color: color
+                    }})))
+                    .enter()
+                    .append("stop")
+                    .attr("offset", d => d.offset)
+                    .attr("stop-color", d => d.color);
+                
+                legend.append("rect")
+                    .attr("width", legendWidth)
+                    .attr("height", legendHeight)
+                    .style("fill", "url(#linear-gradient)");
+                
+                legend.append("text")
+                    .attr("x", 0)
+                    .attr("y", -5)
+                    .style("font-size", "12px")
+                    .text("Intensité du bruit");
+                
+                legend.append("text")
+                    .attr("x", 0)
+                    .attr("y", legendHeight + 15)
+                    .style("font-size", "10px")
+                    .text("Faible");
+                
+                legend.append("text")
+                    .attr("x", legendWidth)
+                    .attr("y", legendHeight + 15)
+                    .style("font-size", "10px")
+                    .style("text-anchor", "end")
+                    .text("Forte");
+            }}
+
             // Initialiser toutes les visualisations
             drawTimeline();
             drawRadar();
-            drawPieChart();
-            drawTable();
             drawHeatmap();
         </script>
     </body>
@@ -890,7 +827,7 @@ with tab2:
     """
 
     # Afficher D3.js
-    components.html(d3_html, height=1800, scrolling=True)
+    components.html(d3_html, height=1300, scrolling=True)
 
 # ========================================
 # TAB 3 — ANALYSE IA
@@ -902,7 +839,6 @@ with tab3:
     try :
         stream_response = interpret_json("sonalyse_advisor/dps_analysis_pi3_exemple.json", "sonalyse_advisor/context.txt","data/logement1.json")
 
-        # Execute the Python code dynamically
         try:
             exec(stream_response)
         except Exception as e:
@@ -910,30 +846,6 @@ with tab3:
     except Exception as e:
         st.error(f"Une erreur s'est produite lors de l'analyse IA : {e}")
 
-# ========================================
-# TAB 4 — RECOMMANDATIONS
-# ========================================
-
-with tab4:
-    st.header("💡 Recommandations Personnalisées")
-    
-    st.subheader("🔧 Solutions Immédiates (50-200€)")
-    st.markdown(
-        """
-        - **Joints de fenêtre adhésifs** (20-40€)
-        - Impact: ⭐⭐⭐ | Réduction: -5 à -8 dB
-        - **Rideaux phoniques** (60-150€)
-        - Impact: ⭐⭐ | Réduction: -3 à -5 dB
-        """
-    )
-    
-    st.subheader("🛠️ Améliorations (500-2000€)")
-    st.markdown(
-        """
-        - **Survitrage** (200-400€/fenêtre)
-        - Impact: ⭐⭐⭐⭐ | Réduction: -8 à -12 dB
-        """
-    )
 
 # FOOTER
 st.divider()
