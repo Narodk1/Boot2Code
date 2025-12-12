@@ -36,6 +36,12 @@ st.set_page_config(page_title="Sonalyze Diagnostic", page_icon="🔊", layout="w
 
 @st.cache_data
 def load_data():
+    """Load real data from JSON and process it.
+    
+
+    Returns:
+        _type_: _description_
+    """
     try:
         # Load JSON
         raw_data = load_json("data/dps_analysis_pi3_exemple.json")
@@ -246,7 +252,7 @@ def generate_pdf_with_graphs(data):
 if data:
     stats = data["stats"]
     grade = data["grade"]
-    st.success(f"✅ {len(data['ratings'])} mesures chargées depuis vos données réelles")
+    st.success(f"✅ {len(data['ratings'])} mesures chargées depuis données réelles")
 else:
     stats = {
         "avg_db": 42.5,
